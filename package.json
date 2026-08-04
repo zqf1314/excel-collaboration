@@ -1,0 +1,28 @@
+{
+  "name": "excel-collaboration",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --config wrangler.jsonc --local",
+    "deploy": "npm run db:migrate:remote && wrangler deploy --config wrangler.jsonc --keep-vars",
+    "deploy:worker": "npm run deploy",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local --config wrangler.jsonc",
+    "db:migrate:remote": "wrangler d1 migrations apply DB --remote --config wrangler.jsonc",
+    "check": "node --check worker/src/index.js && node --check public/api.js && node --check public/shared-data.js && node --check public/config.js",
+    "test": "node --test tests/*.test.mjs",
+    "test:integration": "node tests/integration.local.mjs",
+    "test:columns": "node tests/columns.integration.local.mjs",
+    "test:import": "node tests/import.integration.local.mjs"
+  },
+  "cloudflare": {
+    "bindings": {
+      "DB": {
+        "description": "保存所有同事共享的业务数据、版本号和操作日志；部署时会自动创建。"
+      }
+    }
+  },
+  "devDependencies": {
+    "wrangler": "^4.118.0"
+  }
+}

@@ -1,0 +1,1213 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>招采工作进展管理系统 (横版PPT演示版)</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- SheetJS (XLSX) CDN -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
+    <script src="./config.js"></script>
+    <script src="./api.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        navy: {
+                            800: '#1F4E78',
+                            900: '#143452',
+                            50: '#F2F6FA',
+                            100: '#DDEBF7'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* 针对 PPT 16:9 比例优化全屏与强可视性 */
+        body {
+            background-color: #0f172a;
+            max-width: 100%;
+            overflow-x: hidden;
+        }
+        .ppt-container {
+            max-width: 1700px;
+            width: 98%;
+            margin: 0 auto;
+        }
+        /* 模拟 Excel 冻结首行与前列效果 */
+        .excel-table-container {
+            max-height: calc(100vh - 220px);
+            overflow: auto;
+            scroll-behavior: smooth;
+        }
+        /* 自定义滚动条样式 */
+        .excel-table-container::-webkit-scrollbar {
+            height: 10px;
+            width: 10px;
+        }
+        .excel-table-container::-webkit-scrollbar-thumb {
+            background: #3b82f6;
+            border-radius: 6px;
+        }
+        .excel-table-container::-webkit-scrollbar-track {
+            background: #e2e8f0;
+            border-radius: 6px;
+        }
+
+        /* 修复 Sticky 冻结列与表头混叠遮挡问题 */
+        .excel-table {
+            border-collapse: separate;
+            border-spacing: 0;
+        }
+        .excel-table th {
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            background-color: #1F4E78 !important;
+        }
+
+        /* 冻结前4列精准尺寸定位与层级隔离 */
+        .col-sticky-1 { position: sticky; left: 0px; width: 60px; min-width: 60px; max-width: 60px; }
+        .col-sticky-2 { position: sticky; left: 60px; width: 110px; min-width: 110px; max-width: 110px; }
+        .col-sticky-3 { position: sticky; left: 170px; width: 110px; min-width: 110px; max-width: 110px; }
+        .col-sticky-4 { position: sticky; left: 280px; width: 300px; min-width: 300px; }
+
+        tbody .col-sticky-1,
+        tbody .col-sticky-2,
+        tbody .col-sticky-3,
+        tbody .col-sticky-4 {
+            z-index: 10;
+        }
+
+        thead .col-sticky-1,
+        thead .col-sticky-2,
+        thead .col-sticky-3,
+        thead .col-sticky-4 {
+            z-index: 30 !important;
+            top: 0;
+            background-color: #1F4E78 !important;
+        }
+
+        /* 顶部工具栏：中小屏分行，操作按钮在自身区域横向滚动，避免撑宽整个页面 */
+        .topbar-brand,
+        .topbar-controls,
+        .topbar-tabs,
+        .topbar-actions {
+            min-width: 0;
+        }
+        .topbar-actions > button {
+            flex: 0 0 auto;
+            white-space: nowrap;
+        }
+
+        @media (max-width: 1439px) {
+            .topbar-shell {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .topbar-controls {
+                width: 100%;
+                flex-wrap: wrap;
+            }
+            .topbar-actions {
+                flex: 1 1 100%;
+                width: 100%;
+                overflow-x: auto;
+                overscroll-behavior-x: contain;
+                scrollbar-width: thin;
+                padding-bottom: 4px;
+            }
+            .topbar-actions::-webkit-scrollbar {
+                height: 5px;
+            }
+            .topbar-actions::-webkit-scrollbar-thumb {
+                background: #475569;
+                border-radius: 999px;
+            }
+        }
+
+        @media (max-width: 767px) {
+            .ppt-container {
+                width: 100%;
+            }
+            .topbar-shell {
+                padding-left: 12px;
+                padding-right: 12px;
+            }
+            .topbar-brand {
+                justify-content: center;
+                flex-wrap: wrap;
+                column-gap: 8px;
+                row-gap: 6px;
+                text-align: center;
+            }
+            .topbar-brand h1 {
+                font-size: 1rem;
+                line-height: 1.4;
+            }
+            .topbar-controls {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 8px;
+            }
+            .topbar-tabs {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                width: 100%;
+            }
+            .topbar-tabs button {
+                padding-left: 8px;
+                padding-right: 8px;
+                white-space: nowrap;
+            }
+            #shared-sync-status {
+                align-self: center;
+            }
+            .topbar-actions {
+                gap: 8px;
+            }
+            .topbar-actions > button {
+                min-height: 38px;
+                padding-left: 12px;
+                padding-right: 12px;
+            }
+        }
+    </style>
+</head>
+<body class="bg-slate-900 font-sans text-gray-800 antialiased flex flex-col min-h-screen">
+
+    <!-- 顶部导航与操作栏 (适合PPT展示的横版深色系) -->
+    <header class="bg-navy-900 text-white shadow-xl border-b border-slate-700">
+        <div class="ppt-container topbar-shell px-4 py-3 flex justify-between items-center gap-3">
+            <div class="topbar-brand flex items-center gap-3">
+                <i class="fa-solid fa-chart-line text-blue-400 text-2xl"></i>
+                <h1 class="text-lg font-bold tracking-wide text-white">招采工作进展管理看板</h1>
+                <span class="text-xs bg-blue-900/80 text-blue-200 border border-blue-700 px-2 py-0.5 rounded-full">横版 PPT 嵌入模式</span>
+            </div>
+
+            <div class="topbar-controls flex items-center gap-3">
+                <!-- 切换视图标签 -->
+                <div class="topbar-tabs bg-slate-800 p-1 rounded-lg flex gap-1 border border-slate-700">
+                    <button id="btn-tab-detail" onclick="switchTab('detail')" class="px-4 py-1.5 text-xs font-semibold rounded-md transition bg-blue-600 text-white shadow">
+                        <i class="fa-solid fa-table me-1.5"></i>进展明细表
+                    </button>
+                    <button id="btn-tab-dash" onclick="switchTab('dash')" class="px-4 py-1.5 text-xs font-semibold rounded-md transition text-slate-300 hover:text-white">
+                        <i class="fa-solid fa-chart-pie me-1.5"></i>汇总看板
+                    </button>
+                </div>
+
+                <!-- 分类方式配置、导出 Excel 与 WPS 粘贴适配按钮 -->
+                <div class="topbar-actions flex items-center gap-2">
+                    <button id="btn-column-settings" onclick="openColumnModal()" class="hidden bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow items-center transition" title="新增表格列，或修改现有列名称">
+                        <i class="fa-solid fa-table-columns me-1.5 text-sm"></i>列设置
+                    </button>
+                    <button onclick="openCatMethodModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow flex items-center transition" title="管理并新增采购类别与采购方式">
+                        <i class="fa-solid fa-sliders me-1.5 text-sm"></i>分类与方式管理
+                    </button>
+                    <button onclick="exportToExcel()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow flex items-center transition" title="直接下载Excel文件">
+                        <i class="fa-solid fa-file-excel me-1.5 text-sm"></i>导出 Excel
+                    </button>
+                    <button onclick="copyDataForWPS()" class="bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow flex items-center transition" title="适合在WPS PPT内嵌入时快速复制并粘贴到表格">
+                        <i class="fa-solid fa-copy me-1.5 text-sm"></i>一键复制数据(适配WPS)
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主体内容 -->
+    <main class="flex-grow ppt-container w-full py-4 px-2">
+
+        <!-- ================= 明细表 View ================= -->
+        <section id="view-detail" class="space-y-3">
+
+            <!-- 筛选控制条与新增按钮 -->
+            <div class="bg-white p-3 rounded-xl shadow-md border border-gray-200 flex flex-wrap items-center justify-between gap-3">
+                <div class="flex flex-wrap items-center gap-2 flex-grow">
+                    <!-- 关键字搜索 -->
+                    <div class="relative min-w-[200px]">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-xs"></i>
+                        <input type="text" id="filter-search" oninput="applyFilters()" placeholder="搜索全部列内容..." class="w-full pl-8 pr-3 py-1 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                    </div>
+
+                    <!-- 分类筛选 (动态渲染) -->
+                    <select id="filter-category" onchange="applyFilters()" class="text-xs border border-gray-300 rounded-lg px-2 py-1 outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                        <option value="">所有采购类别</option>
+                    </select>
+
+                    <!-- 部门筛选 -->
+                    <select id="filter-dept" onchange="applyFilters()" class="text-xs border border-gray-300 rounded-lg px-2 py-1 outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                        <option value="">所有部门</option>
+                    </select>
+
+                    <!-- 状态筛选 -->
+                    <select id="filter-status" onchange="applyFilters()" class="text-xs border border-gray-300 rounded-lg px-2 py-1 outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                        <option value="">所有状态阶段</option>
+                    </select>
+
+                    <!-- 经办人筛选 -->
+                    <select id="filter-handler" onchange="applyFilters()" class="text-xs border border-gray-300 rounded-lg px-2 py-1 outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                        <option value="">所有经办人</option>
+                    </select>
+
+                    <button onclick="resetFilters()" class="text-xs text-slate-500 hover:text-blue-600 underline px-1">重置</button>
+                </div>
+
+                <div>
+                    <button onclick="openAddModal()" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium px-3 py-1.5 rounded-lg shadow flex items-center transition">
+                        <i class="fa-solid fa-plus me-1.5"></i>新增招采项目
+                    </button>
+                </div>
+            </div>
+
+            <!-- 数据表格区域 -->
+            <div class="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+
+                <div id="excel-table-box" class="excel-table-container">
+                    <table class="excel-table w-full text-left border-collapse text-xs md:text-sm">
+                        <thead>
+                            <tr id="table-header-row" class="bg-navy-800 text-white font-semibold">
+                                <th class="py-3 px-3 col-sticky-1 text-center bg-navy-800 border-b border-r border-navy-900">序号</th>
+                                <th class="py-3 px-3 col-sticky-2 text-center bg-navy-800 border-b border-r border-navy-900"><span data-column-label="category">采购类别</span></th>
+                                <th class="py-3 px-3 col-sticky-3 text-center bg-navy-800 border-b border-r border-navy-900"><span data-column-label="dept">需求部门</span></th>
+                                <th class="py-3 px-4 col-sticky-4 text-left bg-navy-800 border-b border-r border-navy-900"><span data-column-label="name">项目名称</span></th>
+                                <th class="py-3 px-3 w-28 text-center bg-navy-800 border-b border-r border-navy-900"><span data-column-label="method">采购方式</span></th>
+                                <th class="py-3 px-3 w-24 text-center bg-navy-800 border-b border-r border-navy-900"><span data-column-label="handler">经办人</span></th>
+                                <th class="py-3 px-3 w-32 text-center bg-navy-800 border-b border-r border-navy-900"><span data-column-label="status">采购阶段/状态</span></th>
+                                <th class="py-3 px-4 min-w-[320px] text-left bg-navy-800 border-b border-r border-navy-900"><span data-column-label="progress">最新进展及关键节点说明</span></th>
+                                <th class="py-3 px-4 min-w-[200px] text-left bg-navy-800 border-b border-r border-navy-900"><span data-column-label="remark">预算/备注说明</span></th>
+                                <th id="table-action-header" class="py-3 px-3 w-20 text-center bg-navy-800 border-b">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-body" class="divide-y divide-gray-200">
+                            <!-- JS 动态渲染数据 -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- 底栏信息 -->
+                <div class="bg-gray-50 px-4 py-2 border-t border-gray-200 flex justify-between items-center text-xs text-gray-500">
+                    <span id="record-count-info">共显示 0 条记录</span>
+                    <span>WPS PPT 提示：在演示时支持直接鼠标滚轮或触控板流畅上下左右滑动</span>
+                </div>
+            </div>
+        </section>
+
+
+        <!-- ================= 汇总看板 View ================= -->
+        <section id="view-dash" class="hidden space-y-4">
+
+            <!-- 顶栏 KPI 卡片 (16:9 横版排列) -->
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="bg-white p-4 rounded-xl shadow-md border border-gray-200 flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider">招采项目总数</p>
+                        <h3 id="kpi-total" class="text-3xl font-extrabold text-navy-800 mt-1">0</h3>
+                    </div>
+                    <div class="w-12 h-12 rounded-xl bg-blue-50 text-navy-800 flex items-center justify-center text-xl">
+                        <i class="fa-solid fa-folder-open"></i>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 rounded-xl shadow-md border border-gray-200 flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider">非招标采购项目</p>
+                        <h3 id="kpi-non-tender" class="text-3xl font-extrabold text-emerald-700 mt-1">0</h3>
+                    </div>
+                    <div class="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl">
+                        <i class="fa-solid fa-handshake"></i>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 rounded-xl shadow-md border border-gray-200 flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider">公开招采项目</p>
+                        <h3 id="kpi-tender" class="text-3xl font-extrabold text-amber-600 mt-1">0</h3>
+                    </div>
+                    <div class="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-xl">
+                        <i class="fa-solid fa-gavel"></i>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 rounded-xl shadow-md border border-gray-200 flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider">涉及部门数量</p>
+                        <h3 id="kpi-dept-count" class="text-3xl font-extrabold text-indigo-600 mt-1">0</h3>
+                    </div>
+                    <div class="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-xl">
+                        <i class="fa-solid fa-sitemap"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 图表与统计表区域 (适配横屏布局) -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <!-- 部门项目数柱状图与统计表 -->
+                <div class="bg-white p-4 rounded-xl shadow-md border border-gray-200 space-y-3">
+                    <h4 class="text-sm font-bold text-gray-800 border-l-4 border-navy-800 pl-2">需求部门项目分布</h4>
+                    <div class="h-56">
+                        <canvas id="chartDept"></canvas>
+                    </div>
+                    <div class="overflow-x-auto pt-1 max-h-36 overflow-y-auto">
+                        <table class="w-full text-xs text-left border-collapse">
+                            <thead class="sticky top-0 bg-gray-100">
+                                <tr class="text-gray-700 font-semibold border-b border-gray-200">
+                                    <th class="py-1.5 px-3">部门名称</th>
+                                    <th class="py-1.5 px-3 text-center">项目数量</th>
+                                    <th class="py-1.5 px-3 text-center">占比</th>
+                                </tr>
+                            </thead>
+                            <tbody id="table-dept-stats" class="divide-y divide-gray-100"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 经办人项目数柱状图与统计表 -->
+                <div class="bg-white p-4 rounded-xl shadow-md border border-gray-200 space-y-3">
+                    <h4 class="text-sm font-bold text-gray-800 border-l-4 border-emerald-600 pl-2">经办人工作量统计</h4>
+                    <div class="h-56">
+                        <canvas id="chartHandler"></canvas>
+                    </div>
+                    <div class="overflow-x-auto pt-1 max-h-36 overflow-y-auto">
+                        <table class="w-full text-xs text-left border-collapse">
+                            <thead class="sticky top-0 bg-gray-100">
+                                <tr class="text-gray-700 font-semibold border-b border-gray-200">
+                                    <th class="py-1.5 px-3">经办人</th>
+                                    <th class="py-1.5 px-3 text-center">负责项目数量</th>
+                                    <th class="py-1.5 px-3 text-center">占比</th>
+                                </tr>
+                            </thead>
+                            <tbody id="table-handler-stats" class="divide-y divide-gray-100"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 状态阶段环形图 -->
+            <div class="bg-white p-4 rounded-xl shadow-md border border-gray-200">
+                <h4 class="text-sm font-bold text-gray-800 border-l-4 border-amber-500 pl-2 mb-2">采购阶段/状态总体构成</h4>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+                    <div class="h-52 md:col-span-1">
+                        <canvas id="chartStatus"></canvas>
+                    </div>
+                    <div class="md:col-span-2 overflow-x-auto max-h-52 overflow-y-auto">
+                        <table class="w-full text-xs text-left border-collapse">
+                            <thead class="sticky top-0 bg-gray-100">
+                                <tr class="text-gray-700 font-semibold border-b border-gray-200">
+                                    <th class="py-1.5 px-3">采购阶段/状态</th>
+                                    <th class="py-1.5 px-3 text-center">项目数量</th>
+                                    <th class="py-1.5 px-3 text-center">占比</th>
+                                </tr>
+                            </thead>
+                            <tbody id="table-status-stats" class="divide-y divide-gray-100"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- 提示消息 Toast 容器 -->
+    <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2 pointer-events-none"></div>
+
+    <!-- 新增/编辑弹窗 -->
+    <div id="modal-add" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-xl shadow-2xl max-w-xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center border-b pb-3">
+                <h3 class="text-base font-bold text-gray-800" id="modal-title">新增招采项目</h3>
+                <button onclick="closeAddModal()" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+
+            <form id="form-project" onsubmit="handleFormSubmit(event)" class="space-y-3 text-xs md:text-sm">
+                <input type="hidden" id="edit-id">
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <div class="flex justify-between items-center mb-1">
+                            <label class="block text-gray-700 font-medium" data-column-label="category">采购类别</label>
+                            <button type="button" onclick="openCatMethodModal()" class="text-[11px] text-indigo-600 hover:underline"><i class="fa-solid fa-plus me-0.5"></i>管理分类</button>
+                        </div>
+                        <select id="form-category" required class="w-full border rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-500">
+                            <!-- 动态加载类别 -->
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-gray-700 font-medium mb-1" data-column-label="dept">需求部门</label>
+                        <input type="text" id="form-dept" required placeholder="如：商务部" class="w-full border rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-gray-700 font-medium mb-1" data-column-label="name">项目名称</label>
+                    <input type="text" id="form-name" required placeholder="请输入完整项目名称" class="w-full border rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+
+                <div class="grid grid-cols-3 gap-3">
+                    <div>
+                        <div class="flex justify-between items-center mb-1">
+                            <label class="block text-gray-700 font-medium" data-column-label="method">采购方式</label>
+                            <button type="button" onclick="openCatMethodModal()" class="text-[11px] text-indigo-600 hover:underline"><i class="fa-solid fa-plus me-0.5"></i>管理方式</button>
+                        </div>
+                        <select id="form-method" required class="w-full border rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-500">
+                            <!-- 动态加载方式 -->
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-gray-700 font-medium mb-1" data-column-label="handler">经办人</label>
+                        <input type="text" id="form-handler" required placeholder="经办人姓名" class="w-full border rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-gray-700 font-medium mb-1" data-column-label="status">阶段/状态</label>
+                        <input type="text" id="form-status" required placeholder="如：评标中/待法审" class="w-full border rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-gray-700 font-medium mb-1" data-column-label="progress">最新进展及关键节点说明</label>
+                    <textarea id="form-progress" required rows="3" placeholder="填写最新进展或下阶段规划..." class="w-full border rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+                </div>
+
+                <div>
+                    <label class="block text-gray-700 font-medium mb-1" data-column-label="remark">预算/备注说明</label>
+                    <input type="text" id="form-remark" placeholder="如：预算30万或暂无" class="w-full border rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+
+                <div id="form-custom-fields" class="grid grid-cols-1 gap-3"></div>
+
+                <div class="flex justify-end space-x-2 pt-3 border-t">
+                    <button type="button" onclick="closeAddModal()" class="px-4 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-xs transition">取消</button>
+                    <button type="submit" class="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold transition">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 提示消息 Toast 容器 -->
+    <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2 pointer-events-none"></div>
+
+    <!-- ================= 采购类别与采购方式管理弹窗 ================= -->
+    <div id="modal-cat-method" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-xl shadow-2xl max-w-2xl w-full p-6 space-y-5 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center border-b pb-3">
+                <div class="flex items-center space-x-2">
+                    <i class="fa-solid fa-sliders text-indigo-600 text-lg"></i>
+                    <h3 class="text-base font-bold text-gray-800">采购类别与采购方式管理</h3>
+                </div>
+                <button onclick="closeCatMethodModal()" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- 采购类别管理块 -->
+                <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+                    <div class="flex justify-between items-center">
+                        <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center">
+                            <i class="fa-solid fa-layer-group text-blue-600 me-1.5"></i>采购类别列表
+                        </h4>
+                        <span id="cat-count-badge" class="text-[11px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-semibold">0项</span>
+                    </div>
+
+                    <!-- 新增类别表单 -->
+                    <div class="flex space-x-2">
+                        <input type="text" id="input-new-category" placeholder="输入新类别名称..." class="flex-grow border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-2 focus:ring-indigo-500">
+                        <button onclick="addCategory()" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition flex items-center shrink-0">
+                            <i class="fa-solid fa-plus me-1"></i>添加
+                        </button>
+                    </div>
+
+                    <!-- 类别 Tag 动态列表 -->
+                    <div id="category-list-container" class="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                        <!-- JS 渲染 -->
+                    </div>
+                </div>
+
+                <!-- 采购方式管理块 -->
+                <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+                    <div class="flex justify-between items-center">
+                        <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center">
+                            <i class="fa-solid fa-diagram-project text-emerald-600 me-1.5"></i>采购方式列表
+                        </h4>
+                        <span id="method-count-badge" class="text-[11px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-semibold">0项</span>
+                    </div>
+
+                    <!-- 新增采购方式表单 -->
+                    <div class="flex space-x-2">
+                        <input type="text" id="input-new-method" placeholder="输入新采购方式名称..." class="flex-grow border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-2 focus:ring-indigo-500">
+                        <button onclick="addMethod()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition flex items-center shrink-0">
+                            <i class="fa-solid fa-plus me-1"></i>添加
+                        </button>
+                    </div>
+
+                    <!-- 采购方式 Tag 动态列表 -->
+                    <div id="method-list-container" class="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                        <!-- JS 渲染 -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-end pt-3 border-t">
+                <button onclick="closeCatMethodModal()" class="px-4 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-medium transition">完成并关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JS 逻辑控制 -->
+    <script>
+        // 生产源码不内置业务数据；正式数据由 Worker/D1 提供。
+        let initialData = [];
+
+        // 状态徽章颜色样式映射字典
+        const statusBadgeStyles = {
+            "已完成": "bg-emerald-100 text-emerald-800 border-emerald-300",
+            "已发标": "bg-emerald-100 text-emerald-800 border-emerald-300",
+            "招标文件已完成": "bg-emerald-100 text-emerald-800 border-emerald-300",
+            "评标中": "bg-amber-100 text-amber-800 border-amber-300",
+            "待法审": "bg-amber-100 text-amber-800 border-amber-300",
+            "采购文件编制中": "bg-blue-100 text-blue-800 border-blue-300",
+            "正在编辑采购文件": "bg-blue-100 text-blue-800 border-blue-300",
+            "内部审批中": "bg-slate-100 text-slate-800 border-slate-300",
+            "采购准备中": "bg-slate-100 text-slate-800 border-slate-300",
+            "采购程序中": "bg-orange-100 text-orange-800 border-orange-300",
+            "供应商确认中": "bg-orange-100 text-orange-800 border-orange-300",
+            "供应商前期沟通工作": "bg-gray-100 text-gray-800 border-gray-300"
+        };
+
+        const LOCAL_KEY = 'procurement_tracker_data_v2';
+        const LOCAL_KEY_CATS = 'procurement_categories_v2';
+        const LOCAL_KEY_METHODS = 'procurement_methods_v2';
+
+        let projects = [];
+        let categoriesList = ["非招标采购", "公开招采"];
+        let methodsList = ["询比/比选", "公开招标", "直接采购", "邀请招标"];
+        let columnDefinitions = [];
+        let customColumns = [];
+
+        const FIXED_COLUMN_DEFAULTS = [
+            { field_key: 'category', name: '采购类别' },
+            { field_key: 'dept', name: '需求部门' },
+            { field_key: 'name', name: '项目名称' },
+            { field_key: 'method', name: '采购方式' },
+            { field_key: 'handler', name: '经办人' },
+            { field_key: 'status', name: '采购阶段/状态' },
+            { field_key: 'progress', name: '最新进展及关键节点说明' },
+            { field_key: 'remark', name: '预算/备注说明' }
+        ];
+
+        let chartDeptInstance = null;
+        let chartHandlerInstance = null;
+        let chartStatusInstance = null;
+
+        function switchTab(tab) {
+            const detailView = document.getElementById('view-detail');
+            const dashView = document.getElementById('view-dash');
+            const btnDetail = document.getElementById('btn-tab-detail');
+            const btnDash = document.getElementById('btn-tab-dash');
+
+            if (tab === 'detail') {
+                detailView.classList.remove('hidden');
+                dashView.classList.add('hidden');
+                btnDetail.className = "px-4 py-1.5 text-xs font-semibold rounded-md transition bg-blue-600 text-white shadow";
+                btnDash.className = "px-4 py-1.5 text-xs font-semibold rounded-md transition text-slate-300 hover:text-white";
+            } else {
+                detailView.classList.add('hidden');
+                dashView.classList.remove('hidden');
+                btnDash.className = "px-4 py-1.5 text-xs font-semibold rounded-md transition bg-blue-600 text-white shadow";
+                btnDetail.className = "px-4 py-1.5 text-xs font-semibold rounded-md transition text-slate-300 hover:text-white";
+                renderDashboard();
+            }
+        }
+
+        function escapeAppHtml(value) {
+            return String(value ?? '').replace(/[&<>\"']/g, char => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', "'": '&#39;'
+            })[char]);
+        }
+
+        function columnLabel(fieldKey) {
+            return columnDefinitions.find(column => column.column_type === 'fixed' && column.field_key === fieldKey)?.name
+                || FIXED_COLUMN_DEFAULTS.find(column => column.field_key === fieldKey)?.name
+                || fieldKey;
+        }
+
+        function businessColumns() {
+            return [
+                ...FIXED_COLUMN_DEFAULTS.map(column => ({
+                    ...column,
+                    name: columnLabel(column.field_key),
+                    column_type: 'fixed'
+                })),
+                ...customColumns.map(column => ({ ...column, column_type: 'custom' }))
+            ];
+        }
+
+        function renderColumnSchema() {
+            document.querySelectorAll('[data-column-label]').forEach(element => {
+                element.textContent = columnLabel(element.dataset.columnLabel);
+            });
+            const row = document.getElementById('table-header-row');
+            const actionHeader = document.getElementById('table-action-header');
+            if (!row || !actionHeader) return;
+            row.querySelectorAll('[data-custom-column-header]').forEach(element => element.remove());
+            customColumns.forEach(column => {
+                const th = document.createElement('th');
+                th.dataset.customColumnHeader = column.id;
+                th.className = 'py-3 px-4 min-w-[180px] text-left bg-navy-800 border-b border-r border-navy-900';
+                th.textContent = column.name;
+                row.insertBefore(th, actionHeader);
+            });
+        }
+
+        function renderCustomFieldInputs(project = null) {
+            const container = document.getElementById('form-custom-fields');
+            if (!container) return;
+            if (!customColumns.length) {
+                container.innerHTML = '';
+                return;
+            }
+            const values = project?.customValues || {};
+            container.innerHTML = customColumns.map(column => `
+                <div>
+                    <label class="block text-gray-700 font-medium mb-1">${escapeAppHtml(column.name)}</label>
+                    <input type="text" maxlength="2000" data-custom-column-input="${escapeAppHtml(column.id)}"
+                        value="${escapeAppHtml(values[column.id] || '')}" placeholder="请输入${escapeAppHtml(column.name)}"
+                        class="w-full border rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+            `).join('');
+        }
+
+        function readCustomValuesFromForm() {
+            return Object.fromEntries([...document.querySelectorAll('[data-custom-column-input]')].map(input => [
+                input.dataset.customColumnInput,
+                input.value.trim()
+            ]));
+        }
+
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            if (!container) return;
+            const toast = document.createElement('div');
+            const bgColors = {
+                success: 'bg-emerald-600',
+                warning: 'bg-amber-600',
+                info: 'bg-blue-600',
+                error: 'bg-red-600'
+            };
+            const icons = {
+                success: 'fa-circle-check',
+                warning: 'fa-triangle-exclamation',
+                info: 'fa-circle-info',
+                error: 'fa-circle-xmark'
+            };
+
+            toast.className = `${bgColors[type] || 'bg-slate-800'} text-white px-4 py-2.5 rounded-xl shadow-xl flex items-center space-x-2 text-xs transition-all transform duration-300 pointer-events-auto opacity-0 translate-y-2`;
+            toast.innerHTML = `<i class="fa-solid ${icons[type] || 'fa-circle-info'} text-sm"></i><span>${escapeAppHtml(message)}</span>`;
+
+            container.appendChild(toast);
+
+            requestAnimationFrame(() => {
+                toast.classList.remove('opacity-0', 'translate-y-2');
+            });
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        function initLocalStorage() {
+            // 生产版由 shared-data.js 从 Worker/D1 异步加载。
+            // 三个旧 localStorage 键只用于管理员执行一次性迁移，不再作为数据源。
+            projects = [];
+        }
+
+        function saveToLocalStorage() {
+            // 已迁移至 Worker/D1；保留函数名仅用于兼容旧界面代码。
+        }
+
+        function saveCatsToLocalStorage() {
+            // 已迁移至 Worker/D1。
+        }
+
+        function saveMethodsToLocalStorage() {
+            // 已迁移至 Worker/D1。
+        }
+
+        function openCatMethodModal() {
+            renderCatMethodLists();
+            document.getElementById('modal-cat-method').classList.remove('hidden');
+            document.getElementById('modal-cat-method').classList.add('flex');
+        }
+
+        function closeCatMethodModal() {
+            document.getElementById('modal-cat-method').classList.add('hidden');
+            document.getElementById('modal-cat-method').classList.remove('flex');
+        }
+
+        function renderCatMethodLists() {
+            // 渲染类别
+            const catContainer = document.getElementById('category-list-container');
+            document.getElementById('cat-count-badge').textContent = `${categoriesList.length}项`;
+            catContainer.innerHTML = categoriesList.map((cat, idx) => `
+                <div class="flex justify-between items-center bg-white px-3 py-1.5 rounded-lg border border-slate-200 text-xs shadow-sm">
+                    <span class="font-medium text-slate-800">${cat}</span>
+                    <button onclick="deleteCategory(${idx})" class="text-gray-400 hover:text-red-500 transition p-0.5" title="删除类别">
+                        <i class="fa-solid fa-trash-can"></i>
+                    </button>
+                </div>
+            `).join('');
+
+            // 渲染采购方式
+            const methodContainer = document.getElementById('method-list-container');
+            document.getElementById('method-count-badge').textContent = `${methodsList.length}项`;
+            methodContainer.innerHTML = methodsList.map((m, idx) => `
+                <div class="flex justify-between items-center bg-white px-3 py-1.5 rounded-lg border border-slate-200 text-xs shadow-sm">
+                    <span class="font-medium text-slate-800">${m}</span>
+                    <button onclick="deleteMethod(${idx})" class="text-gray-400 hover:text-red-500 transition p-0.5" title="删除方式">
+                        <i class="fa-solid fa-trash-can"></i>
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        function addCategory() {
+            const input = document.getElementById('input-new-category');
+            const val = input.value.trim();
+            if (!val) {
+                showToast("请输入采购类别名称", "warning");
+                return;
+            }
+            if (categoriesList.includes(val)) {
+                showToast("该采购类别已存在", "warning");
+                return;
+            }
+            categoriesList.push(val);
+            saveCatsToLocalStorage();
+            input.value = '';
+            renderCatMethodLists();
+            initFilterDropdowns();
+            showToast(`已新增采购类别：${val}`, "success");
+        }
+
+        function deleteCategory(index) {
+            const removed = categoriesList[index];
+            if (categoriesList.length <= 1) {
+                showToast("至少保留一种采购类别！", "warning");
+                return;
+            }
+            categoriesList.splice(index, 1);
+            saveCatsToLocalStorage();
+            renderCatMethodLists();
+            initFilterDropdowns();
+            showToast(`已删除类别：${removed}`, "info");
+        }
+
+        function addMethod() {
+            const input = document.getElementById('input-new-method');
+            const val = input.value.trim();
+            if (!val) {
+                showToast("请输入采购方式名称", "warning");
+                return;
+            }
+            if (methodsList.includes(val)) {
+                showToast("该采购方式已存在", "warning");
+                return;
+            }
+            methodsList.push(val);
+            saveMethodsToLocalStorage();
+            input.value = '';
+            renderCatMethodLists();
+            initFilterDropdowns();
+            showToast(`已新增采购方式：${val}`, "success");
+        }
+
+        function deleteMethod(index) {
+            const removed = methodsList[index];
+            if (methodsList.length <= 1) {
+                showToast("至少保留一种采购方式！", "warning");
+                return;
+            }
+            methodsList.splice(index, 1);
+            saveMethodsToLocalStorage();
+            renderCatMethodLists();
+            initFilterDropdowns();
+            showToast(`已删除方式：${removed}`, "info");
+        }
+
+        // 初始化下拉菜单列表（适配动态类别与方式）
+        function initFilterDropdowns() {
+            const depts = [...new Set(projects.map(p => p.dept))];
+            const statuses = [...new Set(projects.map(p => p.status))];
+            const handlers = [...new Set(projects.map(p => p.handler))];
+
+            // 动态填充分类筛选下拉
+            const catSelect = document.getElementById('filter-category');
+            catSelect.innerHTML = `<option value="">所有${escapeAppHtml(columnLabel('category'))}</option>` + categoriesList.map(c => `<option value="${c}">${c}</option>`).join('');
+
+            // 动态填充新增/编辑弹窗的项目分类与方式下拉
+            const formCatSelect = document.getElementById('form-category');
+            if (formCatSelect) {
+                formCatSelect.innerHTML = categoriesList.map(c => `<option value="${c}">${c}</option>`).join('');
+            }
+
+            const formMethodSelect = document.getElementById('form-method');
+            if (formMethodSelect) {
+                formMethodSelect.innerHTML = methodsList.map(m => `<option value="${m}">${m}</option>`).join('');
+            }
+
+            const deptSelect = document.getElementById('filter-dept');
+            deptSelect.innerHTML = `<option value="">所有${escapeAppHtml(columnLabel('dept'))}</option>` + depts.map(d => `<option value="${d}">${d}</option>`).join('');
+
+            const statusSelect = document.getElementById('filter-status');
+            statusSelect.innerHTML = `<option value="">所有${escapeAppHtml(columnLabel('status'))}</option>` + statuses.map(s => `<option value="${s}">${s}</option>`).join('');
+
+            const handlerSelect = document.getElementById('filter-handler');
+            handlerSelect.innerHTML = `<option value="">所有${escapeAppHtml(columnLabel('handler'))}</option>` + handlers.map(h => `<option value="${h}">${h}</option>`).join('');
+        }
+
+        // 渲染表格
+        function renderTable(dataToRender) {
+            const tbody = document.getElementById('table-body');
+            tbody.innerHTML = '';
+            renderColumnSchema();
+
+            dataToRender.forEach((item, index) => {
+                const tr = document.createElement('tr');
+                tr.className = index % 2 === 1 ? 'bg-navy-50/50 hover:bg-blue-50 transition' : 'bg-white hover:bg-blue-50 transition';
+
+                const badgeClass = statusBadgeStyles[item.status] || 'bg-gray-100 text-gray-800 border-gray-300';
+                const cellBg = index % 2 === 1 ? 'bg-slate-100' : 'bg-white';
+                const safeId = String(item.id).replace(/[^a-zA-Z0-9_-]/g, '');
+
+                tr.innerHTML = `
+                    <td class="py-2.5 px-3 text-center font-medium text-gray-500 col-sticky-1 ${cellBg} border-b border-r border-gray-200">${index + 1}</td>
+                    <td class="py-2.5 px-3 text-center col-sticky-2 ${cellBg} border-b border-r border-gray-200">
+                        <span class="inline-block px-2 py-0.5 rounded text-xs ${item.category === '非招标采购' ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-purple-50 text-purple-700 border border-purple-200'}">${escapeAppHtml(item.category)}</span>
+                    </td>
+                    <td class="py-2.5 px-3 text-center font-medium col-sticky-3 ${cellBg} border-b border-r border-gray-200">${escapeAppHtml(item.dept)}</td>
+                    <td class="py-2.5 px-4 font-semibold text-gray-900 col-sticky-4 ${cellBg} border-b border-r border-gray-200">${escapeAppHtml(item.name)}</td>
+                    <td class="py-2.5 px-3 text-center text-gray-600 border-b border-r border-gray-200">${escapeAppHtml(item.method)}</td>
+                    <td class="py-2.5 px-3 text-center font-medium text-gray-800 border-b border-r border-gray-200">${escapeAppHtml(item.handler)}</td>
+                    <td class="py-2.5 px-3 text-center border-b border-r border-gray-200">
+                        <span class="inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold border ${badgeClass}">${escapeAppHtml(item.status)}</span>
+                    </td>
+                    <td class="py-2.5 px-4 text-gray-600 leading-relaxed border-b border-r border-gray-200">${escapeAppHtml(item.progress)}</td>
+                    <td class="py-2.5 px-4 text-gray-500 border-b border-r border-gray-200">${escapeAppHtml(item.remark)}</td>
+                    ${customColumns.map(column => `<td class="py-2.5 px-4 text-gray-600 border-b border-r border-gray-200">${escapeAppHtml(item.customValues?.[column.id] || '')}</td>`).join('')}
+                    <td class="py-2.5 px-3 text-center space-x-1 border-b border-gray-200">
+                        <button onclick="editProject('${safeId}')" class="text-blue-600 hover:text-blue-800 p-1" title="编辑"><i class="fa-solid fa-pen-to-square"></i></button>
+                        <button onclick="deleteProject('${safeId}')" class="text-red-500 hover:text-red-700 p-1" title="删除"><i class="fa-solid fa-trash-can"></i></button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById('record-count-info').textContent = `共显示 ${dataToRender.length} 条记录`;
+        }
+
+        // 应用筛选条件
+        function applyFilters() {
+            const searchVal = document.getElementById('filter-search').value.toLowerCase();
+            const catVal = document.getElementById('filter-category').value;
+            const deptVal = document.getElementById('filter-dept').value;
+            const statusVal = document.getElementById('filter-status').value;
+            const handlerVal = document.getElementById('filter-handler').value;
+
+            const filtered = projects.filter(item => {
+                const searchableValues = [
+                    item.category, item.dept, item.name, item.method, item.handler,
+                    item.status, item.progress, item.remark,
+                    ...Object.values(item.customValues || {})
+                ];
+                const matchSearch = !searchVal || searchableValues.some(value => String(value || '').toLowerCase().includes(searchVal));
+                const matchCat = !catVal || item.category === catVal;
+                const matchDept = !deptVal || item.dept === deptVal;
+                const matchStatus = !statusVal || item.status === statusVal;
+                const matchHandler = !handlerVal || item.handler === handlerVal;
+                return matchSearch && matchCat && matchDept && matchStatus && matchHandler;
+            });
+
+            renderTable(filtered);
+        }
+
+        // 重置筛选
+        function resetFilters() {
+            document.getElementById('filter-search').value = '';
+            document.getElementById('filter-category').value = '';
+            document.getElementById('filter-dept').value = '';
+            document.getElementById('filter-status').value = '';
+            document.getElementById('filter-handler').value = '';
+            renderTable(projects);
+        }
+
+        // 弹窗控制与新增/编辑
+        function openAddModal() {
+            document.getElementById('modal-title').textContent = '新增招采项目';
+            document.getElementById('form-project').reset();
+            document.getElementById('edit-id').value = '';
+
+            // 确保下拉项为最新
+            initFilterDropdowns();
+            renderCustomFieldInputs();
+
+            document.getElementById('modal-add').classList.remove('hidden');
+            document.getElementById('modal-add').classList.add('flex');
+        }
+
+        function closeAddModal() {
+            document.getElementById('modal-add').classList.add('hidden');
+            document.getElementById('modal-add').classList.remove('flex');
+        }
+
+        function editProject(id) {
+            const item = projects.find(p => p.id === id);
+            if (!item) return;
+
+            initFilterDropdowns();
+
+            document.getElementById('modal-title').textContent = '编辑招采项目';
+            document.getElementById('edit-id').value = item.id;
+            document.getElementById('form-category').value = item.category;
+            document.getElementById('form-dept').value = item.dept;
+            document.getElementById('form-name').value = item.name;
+            document.getElementById('form-method').value = item.method;
+            document.getElementById('form-handler').value = item.handler;
+            document.getElementById('form-status').value = item.status;
+            document.getElementById('form-progress').value = item.progress;
+            document.getElementById('form-remark').value = item.remark;
+            renderCustomFieldInputs(item);
+
+            document.getElementById('modal-add').classList.remove('hidden');
+            document.getElementById('modal-add').classList.add('flex');
+        }
+
+        function deleteProject(id) {
+            if (confirm("确定要删除该招采项目记录吗？")) {
+                projects = projects.filter(p => p.id !== id);
+                saveToLocalStorage();
+                initFilterDropdowns();
+                applyFilters();
+                showToast("项目已从本地删除", "info");
+            }
+        }
+
+        function handleFormSubmit(e) {
+            e.preventDefault();
+            const editId = document.getElementById('edit-id').value;
+
+            const formData = {
+                id: editId ? parseInt(editId) : Date.now(),
+                category: document.getElementById('form-category').value,
+                dept: document.getElementById('form-dept').value.trim(),
+                name: document.getElementById('form-name').value.trim(),
+                method: document.getElementById('form-method').value,
+                handler: document.getElementById('form-handler').value.trim(),
+                status: document.getElementById('form-status').value.trim(),
+                progress: document.getElementById('form-progress').value.trim(),
+                remark: document.getElementById('form-remark').value.trim() || '-',
+                customValues: readCustomValuesFromForm()
+            };
+
+            if (editId) {
+                const index = projects.findIndex(p => p.id === parseInt(editId));
+                if (index !== -1) projects[index] = formData;
+            } else {
+                projects.unshift(formData);
+            }
+
+            saveToLocalStorage();
+            closeAddModal();
+            initFilterDropdowns();
+            applyFilters();
+            showToast(editId ? "修改已保存" : "新项目已添加", "success");
+        }
+
+        // 渲染看板逻辑
+        function renderDashboard() {
+            const total = projects.length;
+            const nonTenderCount = projects.filter(p => p.category === '非招标采购').length;
+            const tenderCount = projects.filter(p => p.category === '公开招采').length;
+
+            document.getElementById('kpi-total').textContent = total;
+            document.getElementById('kpi-non-tender').textContent = nonTenderCount;
+            document.getElementById('kpi-tender').textContent = tenderCount;
+
+            // 部门统计
+            const deptCounts = {};
+            projects.forEach(p => { deptCounts[p.dept] = (deptCounts[p.dept] || 0) + 1; });
+            document.getElementById('kpi-dept-count').textContent = Object.keys(deptCounts).length;
+
+            const deptTableBody = document.getElementById('table-dept-stats');
+            deptTableBody.innerHTML = Object.entries(deptCounts).map(([dept, count]) => `
+                <tr class="hover:bg-gray-50">
+                    <td class="py-1.5 px-3 font-medium text-gray-800">${escapeAppHtml(dept)}</td>
+                    <td class="py-1.5 px-3 text-center font-bold text-navy-800">${count}</td>
+                    <td class="py-1.5 px-3 text-center text-gray-500">${total ? ((count / total) * 100).toFixed(1) : 0}%</td>
+                </tr>
+            `).join('');
+
+            // 经办人统计
+            const handlerCounts = {};
+            projects.forEach(p => { handlerCounts[p.handler] = (handlerCounts[p.handler] || 0) + 1; });
+
+            const handlerTableBody = document.getElementById('table-handler-stats');
+            handlerTableBody.innerHTML = Object.entries(handlerCounts).map(([handler, count]) => `
+                <tr class="hover:bg-gray-50">
+                    <td class="py-1.5 px-3 font-medium text-gray-800">${escapeAppHtml(handler)}</td>
+                    <td class="py-1.5 px-3 text-center font-bold text-emerald-700">${count}</td>
+                    <td class="py-1.5 px-3 text-center text-gray-500">${total ? ((count / total) * 100).toFixed(1) : 0}%</td>
+                </tr>
+            `).join('');
+
+            // 状态阶段统计
+            const statusCounts = {};
+            projects.forEach(p => { statusCounts[p.status] = (statusCounts[p.status] || 0) + 1; });
+
+            const statusTableBody = document.getElementById('table-status-stats');
+            statusTableBody.innerHTML = Object.entries(statusCounts).map(([status, count]) => `
+                <tr class="hover:bg-gray-50">
+                    <td class="py-1.5 px-3 font-medium text-gray-800">${escapeAppHtml(status)}</td>
+                    <td class="py-1.5 px-3 text-center font-bold text-amber-600">${count}</td>
+                    <td class="py-1.5 px-3 text-center text-gray-500">${total ? ((count / total) * 100).toFixed(1) : 0}%</td>
+                </tr>
+            `).join('');
+
+            // 绘制 Chart.js 图表
+            renderCharts(deptCounts, handlerCounts, statusCounts);
+        }
+
+        function renderCharts(deptCounts, handlerCounts, statusCounts) {
+            if (chartDeptInstance) chartDeptInstance.destroy();
+            if (chartHandlerInstance) chartHandlerInstance.destroy();
+            if (chartStatusInstance) chartStatusInstance.destroy();
+
+            const ctxDept = document.getElementById('chartDept').getContext('2d');
+            chartDeptInstance = new Chart(ctxDept, {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(deptCounts),
+                    datasets: [{
+                        label: '项目数量',
+                        data: Object.values(deptCounts),
+                        backgroundColor: '#1F4E78',
+                        borderRadius: 6
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            });
+
+            const ctxHandler = document.getElementById('chartHandler').getContext('2d');
+            chartHandlerInstance = new Chart(ctxHandler, {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(handlerCounts),
+                    datasets: [{
+                        label: '负责项目数',
+                        data: Object.values(handlerCounts),
+                        backgroundColor: '#059669',
+                        borderRadius: 6
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            });
+
+            const ctxStatus = document.getElementById('chartStatus').getContext('2d');
+            chartStatusInstance = new Chart(ctxStatus, {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(statusCounts),
+                    datasets: [{
+                        data: Object.values(statusCounts),
+                        backgroundColor: [
+                            '#10B981', '#F59E0B', '#3B82F6', '#8B5CF6',
+                            '#EC4899', '#6366F1', '#14B8A6', '#64748B'
+                        ]
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } } } }
+            });
+        }
+
+        // 导出普通 Excel 文件 (加装异常捕获与 WPS 提示)
+        function exportToExcel() {
+            try {
+                const columns = businessColumns();
+                const detailRows = projects.map((project, index) => Object.fromEntries([
+                    ['序号', index + 1],
+                    ...columns.map(column => [
+                        column.name,
+                        column.column_type === 'fixed'
+                            ? project[column.field_key]
+                            : project.customValues?.[column.id] || ''
+                    ])
+                ]));
+
+                const wb = XLSX.utils.book_new();
+                const wsDetail = XLSX.utils.json_to_sheet(detailRows);
+                wsDetail['!cols'] = [{ wch: 6 }, ...columns.map(column => ({
+                    wch: ['name', 'progress'].includes(column.field_key) ? 40 : column.field_key === 'remark' ? 25 : 16
+                }))];
+
+                XLSX.utils.book_append_sheet(wb, wsDetail, "招采进展滚动明细表");
+                XLSX.writeFile(wb, "招采工作进展表.xlsx");
+                showToast("Excel 文件正在导出下载...", "success");
+            } catch(e) {
+                console.error(e);
+                showToast("当前内嵌入的WPS限制了直接下载，请使用旁边的【一键复制数据(适配WPS)】按钮！", "warning");
+            }
+        }
+
+        // 专为 WPS 嵌入 PPT 研制的“一键复制表格”方案
+        async function copyDataForWPS() {
+            // 生成 TSV 制表符分隔文本，直接兼容 Excel/WPS 表格粘贴
+            const columns = businessColumns();
+            const headers = ["序号", ...columns.map(column => column.name)];
+            let tsv = headers.join("\t") + "\n";
+            const sanitizeTsvCell = value => String(value ?? '').replace(/\t/g, ' ').replace(/[\r\n]+/g, ' ');
+
+            projects.forEach((p, idx) => {
+                const row = [idx + 1, ...columns.map(column => column.column_type === 'fixed'
+                    ? p[column.field_key]
+                    : p.customValues?.[column.id] || '')];
+                tsv += row.map(sanitizeTsvCell).join("\t") + "\n";
+            });
+
+            try {
+                if (navigator.clipboard?.writeText) {
+                    await navigator.clipboard.writeText(tsv);
+                } else {
+                    const textarea = document.createElement("textarea");
+                    textarea.value = tsv;
+                    textarea.style.position = "fixed";
+                    textarea.style.opacity = "0";
+                    document.body.appendChild(textarea);
+                    textarea.select();
+                    const successful = document.execCommand('copy');
+                    textarea.remove();
+                    if (!successful) throw new Error('legacy-copy-failed');
+                }
+                showToast("数据已复制！请打开 WPS 表格新建任意空白页，按 Ctrl+V 粘贴即可！", "success");
+            } catch (err) {
+                showToast("复制失败，您的浏览器安全设置阻止了该操作", "warning");
+            }
+        }
+
+        // 页面加载完成初始化
+        window.addEventListener('DOMContentLoaded', () => {
+            initLocalStorage();
+            initFilterDropdowns();
+            renderTable(projects);
+        });
+    </script>
+    <script src="./shared-data.js"></script>
+</body>
+</html>

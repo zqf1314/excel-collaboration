@@ -1,0 +1,13 @@
+node_modules/
+.tmp-worker-types/
+.tmp-column-d1/
+.wrangler/
+.wrangler-import-test/
+.dev.vars
+dist/
+*.log
+.DS_Store
+
+# These local-only files contain the pre-migration business snapshot.
+code_artifact.html
+legacy/

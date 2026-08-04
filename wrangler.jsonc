@@ -1,0 +1,23 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "excel-collaboration",
+  "main": "worker/src/index.js",
+  "compatibility_date": "2026-08-02",
+  "observability": {
+    "enabled": true
+  },
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": [
+      "/api/*"
+    ]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "excel-collaboration-data",
+      "migrations_dir": "migrations","database_id": "81f21ba3-53bd-4cac-a317-54b704d8cc27"
+    }
+  ]
+}
